@@ -1,0 +1,69 @@
+# Model registry for CodeSage.
+#
+# Nothing here is hardcoded in Python on purpose: free-tier model availability changes
+# every few weeks. `codesage doctor` probes each provider's live /models endpoint and tells
+# you which of these entries are actually reachable with your keys, so this file is a
+# candidate list rather than a promise.
+#
+# The `family` field is the important one. Two checkpoints of the same base model are not
+# two independent opinions, so the router treats `family` -- not `id` -- as the unit of
+# diversity when it assigns models to a lens.
+
+providers:
+  groq:
+    base_url: https://api.groq.com/openai/v1
+    api_key_env: GROQ_API_KEY
+    # Conservative free-tier limits for Groq.
+    limits:
+      requests_per_minute: 30
+      requests_per_day: 1000
+      tokens_per_day: 500000
+
+  gemini:
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai
+    api_key_env: GEMINI_API_KEY
+    limits:
+      requests_per_minute: 20
+      requests_per_day: 50
+      tokens_per_day: 200000
+
+# Direct, deterministic model IDs. These are the only models we intentionally use for
+# review agents; we do not probe the network on every doctor run to discover "live"
+# models. The app treats the registry as the source of truth for what can be used.
+models:
+  # --- Groq family ---------------------------------------------------------------
+  - id: openai/gpt-oss-120b
+    provider: groq
+    family: gpt-oss
+    context: 131072
+    strengths: [correctness, design]
+
+  - id: llama-3.3-70b-versatile
+    provider: groq
+    family: llama
+    context: 131072
+    strengths: [design, testing]
+
+  # --- Gemini family -------------------------------------------------------------
+  - id: gemini-2.0-flash
+    provider: gemini
+    family: gemini
+    context: 1048576
+    strengths: [correctness, design, security]
+
+  - id: gemini-2.0-flash-lite
+    provider: gemini
+    family: gemini
+    context: 1048576
+    strengths: [testing, design]
+
+# Deterministic per-lens preferences. These are fixed model families that are expected to
+# be available for each agent, using both Groq and Gemini rather than a dynamic live probe.
+lens_preferences:
+  correctness: [gpt-oss, gemini, llama]
+  security: [gemini, gpt-oss, llama]
+  design: [gemini, gpt-oss, llama]
+  testing: [llama, gemini, gpt-oss]
+
+# The critic must come from a family that did not propose the finding.
+critic_preferences: [gemini, llama, gpt-oss]

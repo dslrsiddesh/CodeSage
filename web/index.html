@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CodeSage</title>
+<style>
+  :root {
+    --bg: #fbfbfa; --panel: #fff; --ink: #1c1c1a; --muted: #6b6b66;
+    --line: #e4e4e0; --accent: #3a5f8a;
+    --crit: #a03030; --high: #b8642a; --med: #8a7420; --low: #5a7a5a; --info: #6b6b66;
+    --ok: #2f6b45; --warn: #8a6a20;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16161a; --panel: #1e1e23; --ink: #e8e8e4; --muted: #9a9a94;
+      --line: #32323a; --accent: #7aa6d6;
+      --crit: #e07070; --high: #e0a060; --med: #d4c070; --low: #8ab88a; --info: #9a9a94;
+      --ok: #7ac89a; --warn: #d4b060;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 32px 24px 80px; }
+  header { border-bottom: 1px solid var(--line); padding-bottom: 20px; margin-bottom: 28px; }
+  h1 { margin: 0 0 4px; font-size: 26px; letter-spacing: -0.02em; }
+  .tag { color: var(--muted); font-size: 14px; }
+  form { display: flex; gap: 10px; margin: 24px 0; flex-wrap: wrap; }
+  input[type=text] {
+    flex: 1 1 340px; padding: 11px 14px; border: 1px solid var(--line);
+    border-radius: 8px; background: var(--panel); color: var(--ink); font-size: 15px;
+  }
+  input[type=number] { width: 92px; padding: 11px 10px; border: 1px solid var(--line);
+    border-radius: 8px; background: var(--panel); color: var(--ink); }
+  button {
+    padding: 11px 22px; border: 0; border-radius: 8px; background: var(--accent);
+    color: #fff; font-size: 15px; font-weight: 500; cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 20px; margin-bottom: 18px;
+  }
+  .panel h2 { margin: 0 0 12px; font-size: 13px; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; }
+  .stat .n { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat .l { font-size: 12px; color: var(--muted); }
+  #log { font-family: var(--mono); font-size: 12.5px; max-height: 260px;
+    overflow-y: auto; color: var(--muted); }
+  #log div { padding: 1px 0; }
+  #log .hit { color: var(--ok); }
+  #log .miss { color: var(--muted); }
+  #log .warn { color: var(--warn); }
+  #log .tool { color: var(--accent); }
+  .finding { border-left: 3px solid var(--line); padding: 12px 0 12px 16px; margin-bottom: 18px; }
+  .finding.critical { border-color: var(--crit); } .finding.high { border-color: var(--high); }
+  .finding.medium { border-color: var(--med); } .finding.low { border-color: var(--low); }
+  .finding.info { border-color: var(--info); }
+  .finding.refuted { opacity: 0.55; }
+  .fhead { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 6px; }
+  .score { font-family: var(--mono); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .loc { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+  .sev { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .claim { font-weight: 500; margin-bottom: 6px; }
+  .evidence { font-family: var(--mono); font-size: 12.5px; color: var(--muted);
+    background: var(--bg); padding: 8px 10px; border-radius: 6px; margin-bottom: 8px;
+    overflow-x: auto; white-space: pre-wrap; }
+  .trail { font-size: 13px; color: var(--muted); }
+  .trail div { padding: 1px 0; }
+  .pill { display: inline-block; font-family: var(--mono); font-size: 11px;
+    padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); margin-right: 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); }
+  .matrix td.n { background: var(--bg); }
+  .banner { border-left: 3px solid var(--warn); padding: 10px 14px; font-size: 14px;
+    background: var(--panel); margin-bottom: 18px; }
+  .hidden { display: none; }
+  .scroll { overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>CodeSage</h1>
+    <div class="tag">Multi-LLM code review with mechanical grounding and cross-family consensus</div>
+  </header>
+
+  <div id="health" class="panel">Checking providers&hellip;</div>
+
+  <form id="form">
+    <input type="text" id="target" placeholder="github.com/owner/repo, a PR link, or a local path" required>
+    <input type="number" id="maxfiles" placeholder="files" min="1" max="200" value="10" title="Review budget">
+    <button type="submit" id="go">Review</button>
+  </form>
+
+  <div id="progress" class="panel hidden">
+    <h2>Progress</h2>
+    <div class="stats" id="counters"></div>
+    <div id="log" style="margin-top:14px"></div>
+  </div>
+
+  <div id="degraded" class="banner hidden"></div>
+  <div id="trust" class="panel hidden"></div>
+  <div id="matrix" class="panel hidden"></div>
+  <div id="results" class="hidden"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const pct = x => `${Math.round((x || 0) * 100)}%`;
+
+let counts = { calls: 0, tools: 0, findings: 0, grounded: 0, rejected: 0, clusters: 0 };
+
+fetch('/api/health').then(r => r.json()).then(h => {
+  const el = $('health');
+  if (!h.ready) {
+    el.innerHTML = '<strong>No provider API keys configured.</strong> ' +
+      'Add at least two to <code>.env</code>, then run <code>codesage doctor</code>.';
+    $('go').disabled = true;
+    return;
+  }
+  const warn = h.families.length < 2
+    ? ' <span style="color:var(--warn)">Cross-family agreement is the core signal — one family means much weaker evidence.</span>'
+    : '';
+  el.innerHTML = `<strong>${h.families.length} model famil${h.families.length === 1 ? 'y' : 'ies'} available:</strong> ` +
+    h.families.map(f => `<span class="pill">${esc(f)}</span>`).join('') + warn;
+}).catch(() => { $('health').textContent = 'Could not reach the API.'; });
+
+$('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  counts = { calls: 0, tools: 0, findings: 0, grounded: 0, rejected: 0, clusters: 0 };
+  $('go').disabled = true;
+  ['results', 'trust', 'matrix', 'degraded'].forEach(id => $(id).classList.add('hidden'));
+  $('progress').classList.remove('hidden');
+  $('log').innerHTML = '';
+  renderCounters();
+
+  const body = { target: $('target').value, max_files: Number($('maxfiles').value) || null };
+  const res = await fetch('/api/reviews', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    log(`error: ${esc((await res.json()).detail)}`, 'warn');
+    $('go').disabled = false;
+    return;
+  }
+  follow((await res.json()).run_id);
+});
+
+function log(msg, cls) {
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.innerHTML = msg;
+  $('log').appendChild(d);
+  $('log').scrollTop = $('log').scrollHeight;
+}
+
+function renderCounters() {
+  $('counters').innerHTML = [
+    ['calls', 'model calls'], ['tools', 'tool calls'], ['findings', 'raw findings'],
+    ['grounded', 'grounded'], ['rejected', 'discarded'], ['clusters', 'distinct findings'],
+  ].map(([k, label]) => `<div class="stat"><div class="n">${counts[k]}</div><div class="l">${label}</div></div>`).join('');
+}
+
+function follow(runId) {
+  const src = new EventSource(`/api/reviews/${runId}/stream`);
+  src.onmessage = ev => {
+    const e = JSON.parse(ev.data);
+    switch (e.kind) {
+      case 'started':
+        log(`indexing ${esc(e.target)}`); break;
+      case 'plan': {
+        const how = e.source === 'agent' ? 'planner agent chose' : 'deterministic fallback chose';
+        log(`${how} ${e.files.length} file${e.files.length === 1 ? '' : 's'}: ${e.files.map(esc).join(', ')}`, 'hit');
+        if (e.rationale) log(`  strategy: ${esc(e.rationale)}`);
+        if (e.dropped && e.dropped.length)
+          log(`  dropped ${e.dropped.length} path(s) that do not exist: ${e.dropped.map(esc).join(', ')}`, 'warn');
+        break;
+      }
+      case 'assignment':
+        log(`${esc(e.lens)} &rarr; ${e.families.map(esc).join(', ') || 'nothing'}` +
+            (e.degraded ? ' (degraded)' : ''), e.degraded ? 'warn' : ''); break;
+      case 'review_done': {
+        counts.calls++;
+        counts.findings += e.findings || 0;
+        counts.tools += (e.tool_calls || []).length;
+        renderCounters();
+        const used = (e.tool_calls || []).length
+          ? ` <span class="tool">[${e.tool_calls.map(esc).join(' → ')}]</span>` : '';
+        log(`${esc(e.lens)}/${esc(e.family)} on ${esc(e.path)}: ` +
+            (e.error ? `<span class="warn">${esc(e.error)}</span>`
+                     : `${e.findings} finding${e.findings === 1 ? '' : 's'}`) + used,
+            e.findings ? 'hit' : 'miss');
+        break;
+      }
+      case 'grounded':
+        counts.grounded = e.kept; counts.rejected = e.rejected; renderCounters();
+        log(`ground check: kept ${e.kept}, discarded ${e.rejected} (${pct(e.rate)} ungrounded)`,
+            e.rejected ? 'warn' : 'hit');
+        break;
+      case 'clustered':
+        counts.clusters = e.clusters; renderCounters();
+        log(`clustered into ${e.clusters} distinct finding${e.clusters === 1 ? '' : 's'}, ` +
+            `${e.multi_family} with cross-family support`);
+        break;
+      case 'critique':
+        log(`challenge by ${esc(e.family)}: ${esc(e.verdict)}`,
+            e.verdict === 'rejected' ? 'warn' : ''); break;
+      case 'consensus':
+        log(`consensus via ${esc(e.method)}`); break;
+      case 'complete':
+        src.close(); $('go').disabled = false; log('done', 'hit'); loadReport(runId); break;
+      case 'failed':
+        src.close(); $('go').disabled = false; log(`failed: ${esc(e.error)}`, 'warn'); break;
+    }
+  };
+  src.onerror = () => { src.close(); $('go').disabled = false; };
+}
+
+async function loadReport(runId) {
+  const data = await (await fetch(`/api/reviews/${runId}`)).json();
+  if (!data.summary) return;
+  renderTrust(data.summary);
+  renderMatrix(data.agreement);
+  renderFindings(data.findings || []);
+}
+
+function renderTrust(s) {
+  if (s.degradations && s.degradations.length) {
+    $('degraded').innerHTML = '<strong>This run was degraded.</strong> Quota limits meant part of ' +
+      'the intended ensemble did not run, so some findings have less support than their scores suggest.<ul>' +
+      s.degradations.map(d => `<li>${esc(d)}</li>`).join('') + '</ul>';
+    $('degraded').classList.remove('hidden');
+  }
+  const fams = Object.entries(s.families || {});
+  let html = `<h2>How much to trust this</h2>
+    <p style="margin-top:0">${esc(s.headline)} &middot; ${fams.length} model famil${fams.length === 1 ? 'y' : 'ies'} &middot; ${s.duration_s}s</p>
+    <table><tbody>
+    <tr><td>Model families</td><td>${fams.map(([f, n]) => `<span class="pill">${esc(f)} &times;${n}</span>`).join('')}</td></tr>
+    <tr><td>Discarded as ungrounded</td><td class="n">${s.findings_rejected}/${s.findings_raw} (${pct(s.hallucination_rate)})</td></tr>
+    <tr><td>With cross-family support</td><td class="n">${s.clusters_multi_family}/${s.clusters}</td></tr>
+    <tr><td>File selection</td><td>${s.plan_source === 'agent' ? 'planner agent' : 'deterministic fallback'}</td></tr>
+    <tr><td>Agent tool calls</td><td class="n">${s.tool_calls ?? 0}</td></tr>
+    <tr><td>Cache hit rate</td><td class="n">${pct(s.cache_hit_rate)}</td></tr>
+    </tbody></table>`;
+
+  $('trust').innerHTML = html;
+  $('trust').classList.remove('hidden');
+}
+
+function renderMatrix(a) {
+  if (!a || a.families.length < 2) return;
+  const max = Math.max(1, ...a.families.flatMap(x => a.families.map(y => x === y ? 0 : a.counts[x][y])));
+  let html = `<h2>Model agreement</h2>
+    <p style="margin-top:0;font-size:13.5px;color:var(--muted)">
+    How often each pair of families raised the same finding. Off-diagonal cells close to the
+    diagonal mean the families are finding the same things; low ones mean they are contributing
+    genuinely different perspectives, which is the case for ensembling at all.</p>
+    <div class="scroll"><table class="matrix"><thead><tr><th></th>` +
+    a.families.map(f => `<th class="n">${esc(f)}</th>`).join('') + '</tr></thead><tbody>';
+  for (const x of a.families) {
+    html += `<tr><td><strong>${esc(x)}</strong></td>` + a.families.map(y => {
+      const v = a.counts[x][y];
+      const alpha = x === y ? 0.10 : 0.10 + 0.55 * (v / max);
+      return `<td class="n" style="background:rgba(58,95,138,${alpha.toFixed(2)})">${v}</td>`;
+    }).join('') + '</tr>';
+  }
+  $('matrix').innerHTML = html + '</tbody></table></div>';
+  $('matrix').classList.remove('hidden');
+}
+
+function renderFindings(findings) {
+  const shown = findings.filter(f => !f.refuted && f.score >= 0.35);
+  const rest = findings.length - shown.length;
+  let html = `<div class="panel"><h2>Findings</h2>`;
+  if (!shown.length) {
+    html += '<p style="margin:0">Nothing met the confidence threshold.' +
+      (rest ? ` ${rest} lower-confidence finding${rest === 1 ? '' : 's'} in the JSON output.` : '') + '</p>';
+  }
+  html += shown.map(f => `
+    <div class="finding ${esc(f.severity)}">
+      <div class="fhead">
+        <span class="score">${f.score.toFixed(2)}</span>
+        <span class="sev" style="color:var(--${f.severity === 'critical' ? 'crit' : f.severity === 'high' ? 'high' : f.severity === 'medium' ? 'med' : f.severity === 'low' ? 'low' : 'info'})">${esc(f.severity)}</span>
+        <span class="loc">${esc(f.location)}</span>
+      </div>
+      <div class="claim">${esc(f.claim)}</div>
+      <div class="evidence">${esc(f.evidence)}</div>
+      ${f.suggested_fix ? `<div style="margin-bottom:8px"><strong>Fix.</strong> ${esc(f.suggested_fix)}</div>` : ''}
+      <div class="trail">
+        <div>Raised by <strong>${f.support} of ${f.available}</strong> families:
+          ${f.families.map(x => `<span class="pill">${esc(x)}</span>`).join('')}
+          via ${f.lenses.map(esc).join(', ')}</div>
+        ${(f.corroborating_rules || []).length ? `<div>Independently flagged by static analysis: ${f.corroborating_rules.map(esc).join(', ')}</div>` : ''}
+        <div>${f.critic_verdict === 'upheld' ? 'Survived challenge' :
+               f.critic_verdict === 'rejected' ? '<strong>Disputed</strong>' :
+               'Not challenged — no independent family had quota'}${f.critic_reasoning ? `: <em>${esc(f.critic_reasoning)}</em>` : ''}</div>
+      </div>
+    </div>`).join('');
+  if (shown.length && rest) {
+    html += `<p style="color:var(--muted);font-size:13.5px;margin-bottom:0">
+      ${rest} further finding${rest === 1 ? '' : 's'} scored below the display threshold or were
+      refuted by an independent model. All are present in the JSON output.</p>`;
+  }
+  $('results').innerHTML = html + '</div>';
+  $('results').classList.remove('hidden');
+}
+</script>
+</body>
+</html>
